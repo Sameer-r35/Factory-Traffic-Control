@@ -33,6 +33,16 @@ Open these URLs in your browser:
 
 Keep the terminal open while using the application. Press `Ctrl+C` in that terminal to stop it.
 
+## Deploy a public demo on Render
+
+The repository includes a Render Blueprint in `render.yaml`.
+
+1. Sign in to [Render](https://render.com/) and connect your GitHub account.
+2. Open [Render's Blueprint deployment page](https://render.com/deploy), select this repository, and deploy the Blueprint.
+3. Wait for the deployment to finish, then open the `onrender.com` URL shown for the service. Add `/docs` to that URL to open the API documentation.
+
+The free demo uses the local SQLite database. Its data is temporary and can be lost when the service restarts or is redeployed; the free plan is for trying the app, not durable storage. The app uses a simulated signal controller and has no authentication, so do not use it to control real traffic or submit sensitive data.
+
 The app creates `traffic.db` in the project folder on first run. To use a different database path, set `TRAFFIC_DB_PATH` before starting:
 
 ```powershell
