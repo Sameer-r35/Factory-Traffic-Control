@@ -20,7 +20,12 @@ from traffic.domain.models import Command, ControllerAck, SensorEvent, StatusEve
 from traffic.persistence import SQLiteRepository
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DATABASE_PATH = Path(os.environ.get("TRAFFIC_DB_PATH", PROJECT_ROOT / "traffic.db"))
+DEFAULT_DATABASE_PATH = (
+    Path("/tmp/traffic.db")
+    if os.environ.get("VERCEL") == "1"
+    else PROJECT_ROOT / "traffic.db"
+)
+DATABASE_PATH = Path(os.environ.get("TRAFFIC_DB_PATH", DEFAULT_DATABASE_PATH))
 JUNCTION_ID = os.environ.get("TRAFFIC_JUNCTION_ID", "A")
 WEB_ROOT = PROJECT_ROOT / "web"
 

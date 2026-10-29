@@ -43,6 +43,14 @@ The repository includes a Render Blueprint in `render.yaml`.
 
 The free demo uses the local SQLite database. Its data is temporary and can be lost when the service restarts or is redeployed; the free plan is for trying the app, not durable storage. The app uses a simulated signal controller and has no authentication, so do not use it to control real traffic or submit sensitive data.
 
+## Deploy a public demo on Vercel
+
+1. Import this GitHub repository into [Vercel](https://vercel.com/new).
+2. Keep the project root set to the repository root and use the default Python build settings.
+3. Deploy, then open the deployment URL. Add `/docs` to the URL for the API documentation.
+
+Vercel uses the `/tmp` directory for SQLite, so database contents are temporary and can disappear between function instances or deployments. This is a demo, not durable storage. The app uses a simulated signal controller and has no authentication; do not use it to control real traffic or submit sensitive data.
+
 The app creates `traffic.db` in the project folder on first run. To use a different database path, set `TRAFFIC_DB_PATH` before starting:
 
 ```powershell
