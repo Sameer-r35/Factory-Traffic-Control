@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Factory Traffic Control</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, Segoe UI, sans-serif; background: #101820; color: #e8eef2; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header { display: flex; align-items: center; justify-content: space-between; padding: 18px 4vw; background: #17242d; border-bottom: 1px solid #293943; }
+    h1 { font-size: 1.25rem; margin: 0; }
+    main { max-width: 1200px; margin: auto; padding: 24px 4vw 48px; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 18px; }
+    .card { background: #17242d; border: 1px solid #293943; border-radius: 12px; padding: 18px; margin-bottom: 18px; }
+    .card h2 { font-size: 1rem; margin: 0 0 14px; }
+    .muted { color: #9fb0bb; font-size: .88rem; }
+    .signal-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .signal { background: #111b22; border-radius: 10px; padding: 14px; min-height: 100px; }
+    .lamp { display: inline-block; width: 15px; height: 15px; border-radius: 50%; margin-right: 7px; background: #52616a; vertical-align: -2px; }
+    .lamp.GREEN { background: #39d98a; box-shadow: 0 0 12px #39d98a88; }
+    .lamp.YELLOW { background: #ffce52; box-shadow: 0 0 12px #ffce5288; }
+    .lamp.RED { background: #ff5f68; }
+    .lamp.UNKNOWN { background: #88949b; }
+    .metrics { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+    .pill { border: 1px solid #344650; border-radius: 999px; padding: 6px 10px; font-size: .85rem; }
+    .controls { display: grid; gap: 10px; }
+    form { display: grid; gap: 9px; border-top: 1px solid #293943; padding-top: 13px; }
+    form:first-of-type { border: 0; padding-top: 0; }
+    .row { display: flex; gap: 8px; }
+    input, select, button { font: inherit; border-radius: 7px; padding: 9px 10px; border: 1px solid #3b505c; background: #111b22; color: #e8eef2; min-width: 0; }
+    input, select { width: 100%; }
+    button { cursor: pointer; background: #207d69; border: 0; font-weight: 600; }
+    button.secondary { background: #344650; }
+    button.danger { background: #a63e47; }
+    button:hover { filter: brightness(1.12); }
+    .alerts { display: grid; gap: 8px; }
+    .alert { padding: 10px; border-radius: 8px; background: #22313a; border-left: 4px solid #647984; }
+    .alert.WARNING { border-color: #ffce52; }
+    .alert.CRITICAL { border-color: #ff5f68; }
+    .alert.INFO { border-color: #61b9e8; }
+    .activity { max-height: 320px; overflow: auto; }
+    .event { border-bottom: 1px solid #293943; padding: 8px 0; font-size: .85rem; }
+    #message { position: fixed; right: 20px; bottom: 20px; max-width: 400px; padding: 12px 16px; border-radius: 8px; background: #a63e47; display: none; }
+    #message.good { background: #207d69; }
+    @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } header { padding: 16px 5vw; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Factory Traffic Control · Junction A</h1>
+    <span id="connection" class="muted">Connecting…</span>
+  </header>
+  <main>
+    <div class="layout">
+      <section>
+        <div class="card">
+          <h2>Intersection status</h2>
+          <div class="metrics" id="summary"></div>
+          <div class="signal-layout" id="signals"></div>
+          <p class="muted" id="transition"></p>
+        </div>
+        <div class="card">
+          <h2>Queues</h2>
+          <div class="metrics" id="queues"></div>
+        </div>
+        <div class="card">
+          <h2>Alerts</h2>
+          <div class="alerts" id="alerts"><span class="muted">No alerts.</span></div>
+        </div>
+        <div class="card">
+          <h2>Recent activity</h2>
+          <div class="activity" id="activity"><span class="muted">Loading…</span></div>
+        </div>
+      </section>
+      <aside>
+        <div class="card controls">
+          <h2>Simulate sensor</h2>
+          <form id="sensor-form">
+            <select name="event_type"><option>VEHICLE_ARRIVED</option><option>VEHICLE_CLEARED</option></select>
+            <select name="direction"><option>NORTH</option><option>SOUTH</option><option>EAST</option><option>WEST</option></select>
+            <input name="vehicle_id" placeholder="Vehicle ID (e.g. truck-1)" required>
+            <select name="vehicle_type"><option>TRUCK</option><option>FORKLIFT</option><option>EMPLOYEE_VEHICLE</option><option>EMERGENCY</option></select>
+            <button type="submit">Send sensor event</button>
+          </form>
+        </div>
+        <div class="card controls">
+          <h2>Manual control</h2>
+          <form id="manual-form">
+            <select name="direction"><option>NORTH</option><option>SOUTH</option><option>EAST</option><option>WEST</option></select>
+            <button type="submit">Request green (safe transition)</button>
+          </form>
+          <button id="automatic" class="secondary">Return to automatic</button>
+        </div>
+        <div class="card controls">
+          <h2>Controller simulator</h2>
+          <p class="muted">Take the simulated controller offline to test degraded mode and recovery.</p>
+          <div class="row"><button id="controller-online">Online</button><button id="controller-offline" class="danger">Offline</button></div>
+        </div>
+      </aside>
+    </div>
+  </main>
+  <div id="message" role="status"></div>
+  <script>
+    const $ = (selector) => document.querySelector(selector);
+    const directions = ["NORTH", "SOUTH", "EAST", "WEST"];
+    let junctionId = "A";
+    let messageTimer;
+    function notify(text, good = false) {
+      const box = $("#message");
+      box.textContent = text;
+      box.className = good ? "good" : "";
+      box.style.display = "block";
+      clearTimeout(messageTimer);
+      messageTimer = setTimeout(() => box.style.display = "none", 4000);
+    }
+    async function request(url, options = {}) {
+      const response = await fetch(url, {
+        ...options,
+        headers: { "Content-Type": "application/json", ...(options.headers || {}) }
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.detail || `Request failed (${response.status})`);
+      return body;
+    }
+    async function send(url, body) {
+      try {
+        const result = await request(url, { method: "POST", body: JSON.stringify(body) });
+        notify(`${result.code}: ${result.message || result.kind}`, result.kind === "OK");
+        await refresh();
+      } catch (error) { notify(error.message); }
+    }
+    function renderStatus(status) {
+      junctionId = status.junction_id;
+      $("header h1").textContent = `Factory Traffic Control · Junction ${junctionId}`;
+      $("#connection").textContent = `Connected · controller ${status.controller_status}`;
+      $("#summary").innerHTML = [
+        `Mode: <strong>${status.mode}</strong>`,
+        `Step: <strong>${status.step}</strong>`,
+        `Phase: <strong>${status.phase || "—"}</strong>`,
+        `Target: <strong>${status.target_phase || "—"}</strong>`
+      ].map((text) => `<span class="pill">${text}</span>`).join("");
+      $("#signals").innerHTML = directions.map((direction) => {
+        const desired = status.desired_signals[direction];
+        const actual = status.actual_signals[direction];
+        return `<div class="signal"><strong>${direction}</strong><p><span class="lamp ${desired}"></span>Desired: ${desired}</p><p><span class="lamp ${actual}"></span>Confirmed: ${actual}</p></div>`;
+      }).join("");
+      $("#transition").textContent = `Step elapsed ${status.step_elapsed_s}s · ${status.pending_command ? `waiting for ${status.pending_command.command_id} (attempt ${status.pending_command.attempts})` : "no pending command"}`;
+      $("#queues").innerHTML = Object.entries(status.queues).map(([direction, count]) => `<span class="pill">${direction}: <strong>${count}</strong></span>`).join("");
+      $("#alerts").innerHTML = status.alerts.length
+        ? status.alerts.map((alert) => `<div class="alert ${alert.level}"><strong>${alert.code}</strong> · ${alert.message}</div>`).join("")
+        : '<span class="muted">No active alerts.</span>';
+    }
+    async function refresh() {
+      try {
+        const [status, audit] = await Promise.all([request("/api/status"), request("/api/audit?limit=40")]);
+        renderStatus(status);
+        $("#activity").innerHTML = audit.length ? audit.slice().reverse().map((event) => {
+          const time = new Date(event.timestamp * 1000).toLocaleTimeString();
+          const detail = event.direction ? ` · ${event.direction}` : "";
+          return `<div class="event"><strong>${event.event_type}</strong>${detail}<span class="muted"> · ${time}</span></div>`;
+        }).join("") : '<span class="muted">No activity yet.</span>';
+      } catch (error) {
+        $("#connection").textContent = "Disconnected · retrying";
+        $("#activity").textContent = error.message;
+      }
+    }
+    $("#sensor-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(event.currentTarget));
+      const body = {
+        ...data,
+        event_id: crypto.randomUUID(),
+        junction_id: junctionId,
+        timestamp: new Date().toISOString(),
+        vehicle_type: data.event_type === "VEHICLE_ARRIVED" ? data.vehicle_type : null
+      };
+      send("/api/sensor-events", body);
+    });
+    $("#manual-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(event.currentTarget));
+      send("/api/commands", { command: "MANUAL_GREEN_REQUEST", direction: data.direction, issued_by: "dashboard" });
+    });
+    $("#automatic").addEventListener("click", () => send("/api/commands", { command: "RETURN_TO_AUTOMATIC", issued_by: "dashboard" }));
+    $("#controller-online").addEventListener("click", () => send("/api/simulator", { online: true }));
+    $("#controller-offline").addEventListener("click", () => send("/api/simulator", { online: false }));
+    refresh();
+    setInterval(refresh, 2000);
+  </script>
+</body>
+</html>
